@@ -4,6 +4,7 @@ using Microsoft.Azure.WebJobs;
 using Microsoft.Azure.WebJobs.Extensions.Http;
 using Microsoft.Extensions.Logging;
 using System.IO;
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace RunbookRunner
@@ -17,10 +18,11 @@ namespace RunbookRunner
             [OrchestrationClient] DurableOrchestrationClient orchestrationClient,
             ILogger log)
         {
-            //todo: get jobId
+            //todo: get jobId from query string or post data.
             string jobId = "";
 
-            await orchestrationClient.RaiseEventAsync(JobProcessor.SingletonInstanceId, JobProcessor.JobCompletedEventName, jobId);
+            await orchestrationClient.RaiseEventAsync(JobProcessor.SingletonInstanceId, JobProcessor.JobCompletedEventName,
+                jobId);
             return new OkResult();
         }
     }

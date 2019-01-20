@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using System.Net.Http;
+using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Azure.WebJobs;
 using Microsoft.Azure.WebJobs.Extensions.Http;
@@ -28,14 +29,15 @@ namespace RunbookRunner
 
             await context.CallActivityAsync("JobProcessor_StartJob", jobId);
             Task<string> jobCompletedEvent = context.WaitForExternalEvent<string>(JobCompletedEventName);
+            Task<string> timeoutTask = context.CreateTimer(context.CurrentUtcDateTime.AddMinutes(5),jobId, CancellationToken.None);
+            
             //todo: add a timer to timeout our wait for the job to complete.
             while (true)
             {
                 
-                Task<string> JobQueuedEvent = context.WaitForExternalEvent<string>(JobQueuedEventName);
-                Task<string> completedTask = await Task.WhenAny(new[] { jobCompletedEvent, JobQueuedEvent });
-
-                if (completedTask != jobCompletedEvent)
+                Task<string> queuedEvent = context.WaitForExternalEvent<string>(JobQueuedEventName);    
+                Task<string> completedTask = await Task.WhenAny(jobCompletedEvent, queuedEvent, timeoutTask);
+                if (completedTask == queuedEvent)
                 {
                     string queuedJobId = completedTask.Result;
                     log.LogDebug($"Job queued {queuedJobId}");
@@ -44,10 +46,21 @@ namespace RunbookRunner
                 else
                 {
                     //todo: check that job id matches the one we're waiting for to complete.
-                    log.LogDebug($"Job completed {jobId}");
+
+                    if (completedTask == timeoutTask)
+                    {
+                        //todo: do some logging or retry logic here.
+                        log.LogDebug($"Job timed out {jobId}");
+                        
+                    }
+                    else
+                    { 
+                        log.LogDebug($"Job completed {jobId}");
+                    }
+
                     if (queuedJobs.Count > 0)
                     {
-                        context.ContinueAsNew(queuedJobs); //This is required to keep the execution history from growing indefintely.
+                        context.ContinueAsNew(queuedJobs); //This is required to keep the execution history from growing indefinitely.
                     }
                     break;
                 }
